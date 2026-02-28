@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Time Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -600,10 +603,20 @@ let fileHandle = null;
 let lastSavedCount = 0;
 
 // ── State ──
+// To update categories for all users: edit this array then save the file.
+// The fingerprint detects the change and syncs everyone on next page load.
+function defaultCategories() {
+  return ['Calls', 'Admin', 'Emails', 'Coding'];
+}
+
+function categoryFingerprint() {
+  return defaultCategories().join('\x00');
+}
 
 function defaultState() {
   return {
-    categories: ['Calls', 'Admin', 'Emails', 'Coding'],
+    categories: defaultCategories(),
+    _categoryFingerprint: categoryFingerprint(),
     entries: [],
     activeCategory: null,
     activeStart: null
@@ -613,7 +626,34 @@ function defaultState() {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...defaultState(), ...JSON.parse(raw) };
+    if (raw) {
+      const saved = { ...defaultState(), ...JSON.parse(raw) };
+      if (saved._categoryFingerprint !== categoryFingerprint()) {
+        // Default categories changed in source — sync localStorage
+        const newDefaults = defaultCategories();
+        const oldDefaults = (saved._categoryFingerprint || '').split('\x00');
+        // Add any new defaults the user doesn't have yet
+        newDefaults.forEach(c => {
+          if (!saved.categories.includes(c)) saved.categories.push(c);
+        });
+        // Remove categories that were old defaults but are no longer,
+        // unless the user has logged time entries against them
+        const usedCategories = new Set((saved.entries || []).map(e => e.category));
+        oldDefaults.forEach(c => {
+          if (!newDefaults.includes(c) && !usedCategories.has(c)) {
+            saved.categories = saved.categories.filter(x => x !== c);
+          }
+        });
+        // Stop timer if its category was removed
+        if (saved.activeCategory && !saved.categories.includes(saved.activeCategory)) {
+          saved.activeCategory = null;
+          saved.activeStart = null;
+        }
+        saved._categoryFingerprint = categoryFingerprint();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+      }
+      return saved;
+    }
   } catch(e) {}
   return defaultState();
 }
