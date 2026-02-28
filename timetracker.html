@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface-raised: #232734;
+    --border: #2e3345;
+    --text: #e4e7ef;
+    --text-dim: #8890a6;
+    --accent-1: #6c9cfc;
+    --accent-2: #f59e42;
+    --accent-3: #34d399;
+    --accent-4: #e879a8;
+    --accent-5: #a78bfa;
+    --accent-6: #facc15;
+    --danger: #ef4444;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem 3rem;
+  }
+
+  .container {
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  h1 span {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 0.85rem;
+    margin-left: 0.75rem;
+  }
+
+  .file-status {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 0.25rem;
+  }
+
+  .file-status .linked { color: var(--accent-3); }
+
+  /* Active timer banner */
+  .active-banner {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 2rem;
+    align-items: center;
+    gap: 1rem;
+    animation: fadeSlideIn 0.25s ease-out;
+  }
+
+  .active-banner.visible { display: flex; }
+
+  .active-banner .pulse {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent-3);
+    animation: pulse 1.5s infinite;
+    flex-shrink: 0;
+  }
+
+  .active-banner .info { flex: 1; }
+  .active-banner .category-name { font-weight: 600; font-size: 0.95rem; }
+
+  .active-banner .elapsed {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.75rem; font-weight: 700;
+    letter-spacing: 0.04em; color: var(--accent-3);
+  }
+
+  .active-banner .stop-btn {
+    background: var(--danger); color: white; border: none;
+    padding: 0.6rem 1.25rem; border-radius: 8px;
+    font-family: inherit; font-weight: 600; font-size: 0.85rem;
+    cursor: pointer; transition: all 0.15s;
+  }
+
+  .active-banner .stop-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+  }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Section labels */
+  .section-label {
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--text-dim); margin-bottom: 0.75rem;
+  }
+
+  /* Timer grid */
+  .timers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem; margin-bottom: 2.5rem;
+  }
+
+  .timer-btn {
+    position: relative; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.25rem 1rem 2.75rem; color: var(--text);
+    font-family: inherit; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; text-align: left; overflow: hidden;
+  }
+
+  .timer-btn::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--btn-accent); border-radius: 3px 0 0 3px;
+  }
+
+  .timer-btn .shortcut-key {
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    width: 1.3rem;
+    height: 1.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .timer-btn:hover {
+    background: var(--surface-raised);
+    border-color: var(--btn-accent); transform: translateY(-1px);
+  }
+
+  .timer-btn.active {
+    border-color: var(--accent-3); background: rgba(52, 211, 153, 0.08);
+  }
+
+  .timer-btn .label { display: block; }
+
+  .timer-btn .today {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; font-weight: 400;
+    color: var(--text-dim); margin-top: 0.35rem;
+  }
+
+  /* Settings row */
+  .settings-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+  .add-category-btn, .export-btn, .clear-btn, .link-btn, .edit-btn {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.55rem 1rem;
+    color: var(--text-dim); font-family: inherit;
+    font-size: 0.8rem; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+  }
+
+  .add-category-btn:hover, .export-btn:hover, .link-btn:hover, .edit-btn:hover { color: var(--text); border-color: var(--text-dim); }
+  .clear-btn:hover { color: var(--danger); border-color: var(--danger); }
+  .export-btn { color: var(--accent-1); }
+  .link-btn { color: var(--accent-2); }
+  .edit-btn { color: var(--accent-5); }
+
+  /* Note input row */
+  .note-input-row {
+    display: none; margin-bottom: 2rem; animation: fadeSlideIn 0.2s ease-out;
+  }
+
+  .note-input-row.visible { display: flex; gap: 0.5rem; }
+
+  .note-input-row input {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.6rem 1rem; color: var(--text);
+    font-family: inherit; font-size: 0.85rem; outline: none;
+  }
+
+  .note-input-row input:focus { border-color: var(--accent-1); }
+
+  .note-input-row button {
+    background: var(--accent-1); color: var(--bg); border: none;
+    padding: 0.6rem 1rem; border-radius: 8px;
+    font-family: inherit; font-weight: 600; font-size: 0.8rem; cursor: pointer;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 2rem; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 10px; padding: 0.75rem 1.25rem;
+    font-size: 0.82rem; color: var(--text);
+    opacity: 0; transition: all 0.3s ease;
+    pointer-events: none; z-index: 200;
+  }
+
+  .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--accent-3); }
+  .toast.error { border-color: var(--danger); }
+
+  /* Log table */
+  .log-section { margin-top: 1rem; }
+
+  .log-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .log-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 600px; }
+
+  .log-table th {
+    text-align: left; font-size: 0.68rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-dim); padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .log-table td {
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid rgba(46, 51, 69, 0.5);
+    vertical-align: middle;
+  }
+
+  .log-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .log-table .cat-badge {
+    display: inline-block; padding: 0.15rem 0.55rem;
+    border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+  }
+
+  .log-table .duration { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+  .log-table .note-cell {
+    color: var(--text-dim); max-width: 280px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .log-table .delete-entry {
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; font-size: 0.9rem; padding: 0.2rem 0.4rem;
+    border-radius: 4px; opacity: 0; transition: all 0.15s;
+  }
+
+  .log-table tr:hover .delete-entry { opacity: 1; }
+  .log-table .delete-entry:hover { color: var(--danger); background: rgba(239,68,68,0.1); }
+
+  .empty-state {
+    text-align: center; padding: 3rem;
+    color: var(--text-dim); font-size: 0.85rem;
+  }
+
+  .sync-badge {
+    display: inline-block; font-size: 0.65rem;
+    padding: 0.15rem 0.5rem; border-radius: 4px;
+    background: rgba(52, 211, 153, 0.1); color: var(--accent-3);
+    font-weight: 600; margin-left: 0.5rem;
+  }
+
+  .unsync-badge {
+    display: inline-block; font-size: 0.65rem;
+    padding: 0.15rem 0.5rem; border-radius: 4px;
+    background: rgba(245, 158, 66, 0.1); color: var(--accent-2);
+    font-weight: 600; margin-left: 0.5rem; cursor: pointer;
+  }
+
+  /* Summary bar */
+  .summary-section {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin-top: 0.75rem;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+  }
+
+  .summary-card h3 {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 0.75rem;
+  }
+
+  .summary-total {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+  }
+
+  .summary-total small {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin-left: 0.25rem;
+  }
+
+  .summary-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+  }
+
+  .summary-row .cat-name {
+    color: var(--text-dim);
+  }
+
+  .summary-row .cat-hours {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.75rem;
+  }
+
+  .summary-bar-track {
+    height: 4px;
+    background: var(--surface-raised);
+    border-radius: 2px;
+    margin-top: 0.25rem;
+    overflow: hidden;
+  }
+
+  .summary-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  /* Keyboard hint */
+  .kb-hint {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 0.35rem;
+    opacity: 0.6;
+  }
+
+  .kb-hint kbd {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    margin: 0 0.1rem;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.75rem; width: 380px;
+    animation: fadeSlideIn 0.2s ease-out;
+  }
+
+  .modal h3 { font-size: 1rem; margin-bottom: 1rem; }
+
+  .modal label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 0.3rem;
+  }
+
+  .modal input, .modal select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.6rem 1rem; color: var(--text);
+    font-family: inherit; font-size: 0.85rem; outline: none; margin-bottom: 0.85rem;
+  }
+
+  .modal input:focus, .modal select:focus { border-color: var(--accent-1); }
+
+  .modal select {
+    appearance: none;
+    cursor: pointer;
+  }
+
+  .modal .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
+
+  .modal-actions button {
+    padding: 0.5rem 1rem; border-radius: 8px;
+    font-family: inherit; font-weight: 600; font-size: 0.8rem;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface-raised); color: var(--text); transition: all 0.15s;
+  }
+
+  .modal-actions .primary {
+    background: var(--accent-1); color: var(--bg); border-color: var(--accent-1);
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .timers-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 700px) {
+    body { padding: 1.25rem; }
+    header { flex-direction: column; align-items: flex-start; }
+    .timers-grid { grid-template-columns: repeat(2, 1fr); }
+    .active-banner { flex-wrap: wrap; }
+    .active-banner .elapsed { font-size: 1.35rem; }
+    h1 { font-size: 1.25rem; }
+  }
+
+  @media (max-width: 420px) {
+    body { padding: 0.75rem; }
+    .timers-grid { grid-template-columns: 1fr; }
+    .settings-row { flex-direction: column; }
+    .settings-row button { width: 100%; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div>
+      <h1>Time Tracker <span>local only</span></h1>
+      <div class="file-status" id="fileStatus">No spreadsheet linked</div>
+    </div>
+    <div class="settings-row" style="margin:0">
+      <button class="export-btn" onclick="saveToFile()">↓ Save to spreadsheet</button>
+      <button class="link-btn" onclick="pickFile()">⚙ Link file</button>
+      <button class="edit-btn" onclick="showEditModal()">✎ Edit last</button>
+      <button class="add-category-btn" onclick="showAddModal()">+ Category</button>
+      <button class="clear-btn" onclick="clearLog()">Clear log</button>
+    </div>
+  </header>
+
+  <div class="active-banner" id="activeBanner">
+    <div class="pulse"></div>
+    <div class="info">
+      <div class="category-name" id="activeCategory"></div>
+      <div class="elapsed" id="activeElapsed">00:00:00</div>
+    </div>
+    <button class="stop-btn" onclick="stopTimer()">Stop</button>
+  </div>
+
+  <div class="note-input-row" id="noteRow">
+    <input type="text" id="noteInput" placeholder="Add a note (optional) then press Save…" onkeydown="if(event.key==='Enter')saveNote()">
+    <button onclick="saveNote()">Save</button>
+    <button onclick="skipNote()" style="background:var(--surface-raised);color:var(--text-dim);border:1px solid var(--border)">Skip</button>
+  </div>
+
+  <div class="section-label">Categories <span class="kb-hint"><kbd>1</kbd>–<kbd>9</kbd> start · <kbd>Space</kbd> stop</span></div>
+  <div class="timers-grid" id="timersGrid"></div>
+
+  <div class="log-section">
+    <div class="section-label">Today's log <span id="syncIndicator"></span></div>
+    <div class="log-table-wrap">
+    <table class="log-table">
+      <thead>
+        <tr><th>Category</th><th>Start</th><th>End</th><th>Duration</th><th>Note</th><th></th></tr>
+      </thead>
+      <tbody id="logBody"></tbody>
+    </table>
+    </div>
+    <div class="empty-state" id="emptyState">No entries yet — tap a category or press <kbd>1</kbd>–<kbd>9</kbd> to start tracking.</div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-section">
+    <div class="section-label">Summary</div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h3>Today</h3>
+        <div class="summary-total" id="todayTotal">0h 0m</div>
+        <div class="summary-breakdown" id="todayBreakdown"></div>
+      </div>
+      <div class="summary-card">
+        <h3>This week</h3>
+        <div class="summary-total" id="weekTotal">0h 0m</div>
+        <div class="summary-breakdown" id="weekBreakdown"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Add Category Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h3>Add category</h3>
+    <input type="text" id="newCatInput" placeholder="e.g. Client calls" maxlength="30" onkeydown="if(event.key==='Enter')addCategory()">
+    <div class="modal-actions">
+      <button onclick="hideAddModal()">Cancel</button>
+      <button class="primary" onclick="addCategory()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Last Entry Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3>Edit last entry</h3>
+    <label>Category</label>
+    <select id="editCategory"></select>
+    <div class="field-row">
+      <div>
+        <label>Start time</label>
+        <input type="time" id="editStart">
+      </div>
+      <div>
+        <label>End time</label>
+        <input type="time" id="editEnd">
+      </div>
+    </div>
+    <label>Note</label>
+    <input type="text" id="editNote" placeholder="Optional note" onkeydown="if(event.key==='Enter')saveEdit()">
+    <div class="modal-actions">
+      <button onclick="hideEditModal()">Cancel</button>
+      <button class="primary" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ACCENTS = ['var(--accent-1)','var(--accent-2)','var(--accent-3)','var(--accent-4)','var(--accent-5)','var(--accent-6)'];
+const ACCENT_HEX = ['#6c9cfc','#f59e42','#34d399','#e879a8','#a78bfa','#facc15'];
+const STORAGE_KEY = 'timetracker_data';
+const HANDLE_DB = 'timetracker_filehandle';
+
+let state = loadState();
+let tickInterval = null;
+let pendingEntry = null;
+let fileHandle = null;
+let lastSavedCount = 0;
+
+// ── State ──
+
+function defaultState() {
+  return {
+    categories: ['Calls', 'Admin', 'Emails', 'Coding'],
+    entries: [],
+    activeCategory: null,
+    activeStart: null
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return { ...defaultState(), ...JSON.parse(raw) };
+  } catch(e) {}
+  return defaultState();
+}
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// ── IndexedDB for file handle persistence ──
+
+function openHandleDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HANDLE_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeHandle(handle) {
+  const db = await openHandleDB();
+  const tx = db.transaction('handles', 'readwrite');
+  tx.objectStore('handles').put(handle, 'xlsx');
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+}
+
+async function loadHandle() {
+  try {
+    const db = await openHandleDB();
+    const tx = db.transaction('handles', 'readonly');
+    const req = tx.objectStore('handles').get('xlsx');
+    return new Promise((res) => {
+      req.onsuccess = () => res(req.result || null);
+      req.onerror = () => res(null);
+    });
+  } catch(e) { return null; }
+}
+
+// ── Helpers ──
+
+function accentFor(i) { return ACCENTS[i % ACCENTS.length]; }
+function accentHexFor(i) { return ACCENT_HEX[i % ACCENT_HEX.length]; }
+
+function fmt(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function fmtHM(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function getWeekStart() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1; // Monday = start of week
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function todayTotal(cat) {
+  const today = new Date().toDateString();
+  return state.entries
+    .filter(e => new Date(e.start).toDateString() === today && e.category === cat)
+    .reduce((sum, e) => sum + (new Date(e.end) - new Date(e.start)), 0);
+}
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast visible ' + type;
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+// ── Render ──
+
+function render() {
+  renderGrid(); renderLog(); renderBanner(); renderFileStatus(); renderSummary();
+}
+
+function renderGrid() {
+  const grid = document.getElementById('timersGrid');
+  grid.innerHTML = '';
+  state.categories.forEach((cat, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'timer-btn' + (state.activeCategory === cat ? ' active' : '');
+    btn.style.setProperty('--btn-accent', accentFor(i));
+    const total = todayTotal(cat);
+    const live = (state.activeCategory === cat && state.activeStart)
+      ? (Date.now() - new Date(state.activeStart).getTime()) : 0;
+    btn.innerHTML = `
+      <span class="shortcut-key">${i + 1}</span>
+      <span class="label">${cat}</span>
+      <span class="today">today: ${fmt(total + live)}</span>
+    `;
+    btn.onclick = () => toggleTimer(cat);
+    btn.oncontextmenu = (e) => { e.preventDefault(); removeCategory(cat); };
+    grid.appendChild(btn);
+  });
+}
+
+function renderBanner() {
+  const banner = document.getElementById('activeBanner');
+  if (state.activeCategory && state.activeStart) {
+    banner.classList.add('visible');
+    document.getElementById('activeCategory').textContent = state.activeCategory;
+    updateElapsed();
+    if (!tickInterval) tickInterval = setInterval(() => { updateElapsed(); renderGrid(); }, 1000);
+  } else {
+    banner.classList.remove('visible');
+    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+  }
+}
+
+function updateElapsed() {
+  if (!state.activeStart) return;
+  document.getElementById('activeElapsed').textContent = fmt(Date.now() - new Date(state.activeStart).getTime());
+}
+
+function renderLog() {
+  const body = document.getElementById('logBody');
+  const empty = document.getElementById('emptyState');
+  const today = new Date().toDateString();
+  const todayEntries = state.entries.filter(e => new Date(e.start).toDateString() === today);
+  if (!todayEntries.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  body.innerHTML = todayEntries.slice().reverse().map(e => {
+    const ci = Math.max(0, state.categories.indexOf(e.category));
+    const dur = new Date(e.end) - new Date(e.start);
+    const gi = state.entries.indexOf(e);
+    return `<tr>
+      <td><span class="cat-badge" style="background:${accentHexFor(ci)}22;color:${accentHexFor(ci)}">${e.category}</span></td>
+      <td>${fmtTime(e.start)}</td><td>${fmtTime(e.end)}</td>
+      <td class="duration">${fmt(dur)}</td>
+      <td class="note-cell" title="${e.note||''}">${e.note||'—'}</td>
+      <td><button class="delete-entry" onclick="deleteEntry(${gi})">×</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderFileStatus() {
+  const el = document.getElementById('fileStatus');
+  const ind = document.getElementById('syncIndicator');
+  if (fileHandle) {
+    el.innerHTML = `Linked: <span class="linked">${fileHandle.name}</span>`;
+    const unsaved = state.entries.length - lastSavedCount;
+    ind.innerHTML = unsaved > 0
+      ? `<span class="unsync-badge" onclick="saveToFile()">${unsaved} unsaved</span>`
+      : `<span class="sync-badge">synced</span>`;
+  } else {
+    el.textContent = 'No spreadsheet linked — click "Link file" or "Save to spreadsheet"';
+    ind.innerHTML = '';
+  }
+}
+
+function renderSummary() {
+  const today = new Date().toDateString();
+  const weekStart = getWeekStart();
+
+  const todayEntries = state.entries.filter(e => new Date(e.start).toDateString() === today);
+  const weekEntries = state.entries.filter(e => new Date(e.start) >= weekStart);
+
+  // Include live timer
+  const liveDelta = (state.activeCategory && state.activeStart)
+    ? (Date.now() - new Date(state.activeStart).getTime()) : 0;
+
+  renderSummaryCard(todayEntries, 'todayTotal', 'todayBreakdown', liveDelta);
+  renderSummaryCard(weekEntries, 'weekTotal', 'weekBreakdown', liveDelta);
+}
+
+function renderSummaryCard(entries, totalId, breakdownId, liveDelta) {
+  // Tally by category
+  const byCategory = {};
+  state.categories.forEach(c => byCategory[c] = 0);
+
+  entries.forEach(e => {
+    const ms = new Date(e.end) - new Date(e.start);
+    byCategory[e.category] = (byCategory[e.category] || 0) + ms;
+  });
+
+  // Add live timer
+  if (state.activeCategory && liveDelta > 0 && byCategory.hasOwnProperty(state.activeCategory)) {
+    byCategory[state.activeCategory] += liveDelta;
+  }
+
+  const totalMs = Object.values(byCategory).reduce((a, b) => a + b, 0);
+  const maxMs = Math.max(...Object.values(byCategory), 1);
+
+  document.getElementById(totalId).innerHTML = `${fmtHM(totalMs)}<small>${(totalMs / 3600000).toFixed(1)} decimal hrs</small>`;
+
+  const bd = document.getElementById(breakdownId);
+  bd.innerHTML = state.categories.map((cat, i) => {
+    const ms = byCategory[cat] || 0;
+    if (ms === 0) return '';
+    const pct = Math.round((ms / maxMs) * 100);
+    return `
+      <div class="summary-row">
+        <span class="cat-name">${cat}</span>
+        <span class="cat-hours">${fmtHM(ms)}</span>
+      </div>
+      <div class="summary-bar-track">
+        <div class="summary-bar-fill" style="width:${pct}%;background:${accentHexFor(i)}"></div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Timer actions ──
+
+function toggleTimer(cat) {
+  if (state.activeCategory) {
+    if (state.activeCategory === cat) { stopTimer(); return; }
+    finishCurrent();
+  }
+  state.activeCategory = cat;
+  state.activeStart = new Date().toISOString();
+  save(); render();
+}
+
+function stopTimer() {
+  if (!state.activeCategory) return;
+  pendingEntry = { category: state.activeCategory, start: state.activeStart, end: new Date().toISOString(), note: '' };
+  state.activeCategory = null; state.activeStart = null;
+  save(); render(); showNotePrompt();
+}
+
+function finishCurrent() {
+  if (!state.activeCategory) return;
+  state.entries.push({ category: state.activeCategory, start: state.activeStart, end: new Date().toISOString(), note: '' });
+  state.activeCategory = null; state.activeStart = null;
+  save();
+}
+
+function showNotePrompt() {
+  document.getElementById('noteRow').classList.add('visible');
+  const inp = document.getElementById('noteInput'); inp.value = ''; inp.focus();
+}
+
+function saveNote() {
+  if (!pendingEntry) return;
+  pendingEntry.note = document.getElementById('noteInput').value.trim();
+  state.entries.push(pendingEntry); pendingEntry = null;
+  document.getElementById('noteRow').classList.remove('visible');
+  save(); render(); autoSave();
+}
+
+function skipNote() {
+  if (!pendingEntry) return;
+  state.entries.push(pendingEntry); pendingEntry = null;
+  document.getElementById('noteRow').classList.remove('visible');
+  save(); render(); autoSave();
+}
+
+function deleteEntry(i) { state.entries.splice(i, 1); save(); render(); saveToFile(); }
+
+function removeCategory(cat) {
+  if (state.categories.length <= 1) return;
+  if (!confirm(`Remove "${cat}"? (entries kept)`)) return;
+  state.categories = state.categories.filter(c => c !== cat);
+  if (state.activeCategory === cat) { state.activeCategory = null; state.activeStart = null; }
+  save(); render();
+}
+
+function showAddModal() {
+  document.getElementById('addModal').classList.add('visible');
+  document.getElementById('newCatInput').value = '';
+  setTimeout(() => document.getElementById('newCatInput').focus(), 50);
+}
+
+function hideAddModal() { document.getElementById('addModal').classList.remove('visible'); }
+
+function addCategory() {
+  const name = document.getElementById('newCatInput').value.trim();
+  if (!name || state.categories.includes(name)) return;
+  state.categories.push(name); save(); render(); hideAddModal();
+}
+
+function clearLog() {
+  if (!confirm('Clear all time entries? Cannot be undone.')) return;
+  state.entries = []; lastSavedCount = 0; save(); render();
+}
+
+// ── Edit last entry ──
+
+function showEditModal() {
+  if (!state.entries.length) { showToast('No entries to edit', 'error'); return; }
+  const e = state.entries[state.entries.length - 1];
+
+  // Populate category dropdown
+  const sel = document.getElementById('editCategory');
+  sel.innerHTML = state.categories.map(c =>
+    `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`
+  ).join('');
+
+  // Populate times
+  const startD = new Date(e.start);
+  const endD = new Date(e.end);
+  document.getElementById('editStart').value =
+    `${String(startD.getHours()).padStart(2,'0')}:${String(startD.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('editEnd').value =
+    `${String(endD.getHours()).padStart(2,'0')}:${String(endD.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('editNote').value = e.note || '';
+
+  document.getElementById('editModal').classList.add('visible');
+}
+
+function hideEditModal() { document.getElementById('editModal').classList.remove('visible'); }
+
+function saveEdit() {
+  if (!state.entries.length) return;
+  const e = state.entries[state.entries.length - 1];
+
+  const cat = document.getElementById('editCategory').value;
+  const startTime = document.getElementById('editStart').value;
+  const endTime = document.getElementById('editEnd').value;
+  const note = document.getElementById('editNote').value.trim();
+
+  if (!startTime || !endTime) { showToast('Please enter both times', 'error'); return; }
+
+  // Rebuild ISO strings keeping the original date
+  const origDate = new Date(e.start);
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+
+  const newStart = new Date(origDate); newStart.setHours(sh, sm, 0, 0);
+  const newEnd = new Date(origDate); newEnd.setHours(eh, em, 0, 0);
+
+  if (newEnd <= newStart) { showToast('End must be after start', 'error'); return; }
+
+  e.category = cat;
+  e.start = newStart.toISOString();
+  e.end = newEnd.toISOString();
+  e.note = note;
+
+  save(); render(); hideEditModal();
+  showToast('Entry updated');
+  saveToFile(); // Force sync — edits must overwrite Excel
+}
+
+// ── Keyboard shortcuts ──
+
+function isInputFocused() {
+  const el = document.activeElement;
+  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+}
+
+document.addEventListener('keydown', function(e) {
+  // Don't capture if typing in an input
+  if (isInputFocused()) return;
+
+  // Don't capture if a modal is open
+  if (document.getElementById('addModal').classList.contains('visible')) return;
+  if (document.getElementById('editModal').classList.contains('visible')) return;
+
+  // Space = stop current timer
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (state.activeCategory) {
+      stopTimer();
+    }
+    return;
+  }
+
+  // 1-9 = toggle timer for category
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= 9 && num <= state.categories.length) {
+    e.preventDefault();
+    toggleTimer(state.categories[num - 1]);
+    return;
+  }
+
+  // E = edit last entry
+  if (e.key === 'e' || e.key === 'E') {
+    e.preventDefault();
+    showEditModal();
+    return;
+  }
+});
+
+// ── Excel file persistence ──
+
+function entryToRow(e) {
+  const dur = (new Date(e.end) - new Date(e.start)) / 1000;
+  return {
+    'Date': fmtDate(e.start),
+    'Category': e.category,
+    'Start': fmtTime(e.start),
+    'End': fmtTime(e.end),
+    'Hours': Math.floor(dur / 3600),
+    'Minutes': Math.floor((dur % 3600) / 60),
+    'Seconds': Math.floor(dur % 60),
+    'Duration (decimal hrs)': Math.round((dur / 3600) * 100) / 100,
+    'Note': e.note || ''
+  };
+}
+
+async function pickFile() {
+  if (!window.showSaveFilePicker) {
+    showToast('Needs Chrome or Edge for file linking', 'error'); return;
+  }
+  try {
+    fileHandle = await window.showSaveFilePicker({
+      suggestedName: 'timesheet.xlsx',
+      types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
+    });
+    await storeHandle(fileHandle);
+    showToast(`Linked to ${fileHandle.name}`); render();
+  } catch (e) {
+    if (e.name !== 'AbortError') showToast('Could not link file', 'error');
+  }
+}
+
+async function readExistingRows() {
+  if (!fileHandle) return [];
+  try {
+    const file = await fileHandle.getFile();
+    const buf = await file.arrayBuffer();
+    if (buf.byteLength === 0) return [];
+    const wb = XLSX.read(buf, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return ws ? XLSX.utils.sheet_to_json(ws) : [];
+  } catch (e) { return []; }
+}
+
+async function writeToHandle(rows) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 8 },
+    { wch: 6 }, { wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 30 }
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Time Log');
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const writable = await fileHandle.createWritable();
+  await writable.write(new Uint8Array(wbout));
+  await writable.close();
+}
+
+async function saveToFile() {
+  if (!fileHandle) {
+    if (!window.showSaveFilePicker) { fallbackDownload(); return; }
+    try {
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: 'timesheet.xlsx',
+        types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
+      });
+      await storeHandle(fileHandle);
+    } catch (e) {
+      if (e.name !== 'AbortError') showToast('Could not create file', 'error');
+      return;
+    }
+  }
+
+  try {
+    const perm = await fileHandle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') {
+      const req = await fileHandle.requestPermission({ mode: 'readwrite' });
+      if (req !== 'granted') { showToast('Permission denied', 'error'); return; }
+    }
+
+    const existing = await readExistingRows();
+    const todayStr = fmtDate(new Date().toISOString());
+
+    // Remove today's rows from Excel — browser is source of truth for today
+    const kept = existing.filter(r => r['Date'] !== todayStr);
+
+    // Add all of today's browser entries
+    const todayRows = state.entries
+      .filter(e => fmtDate(e.start) === todayStr)
+      .map(e => entryToRow(e));
+
+    // Also keep any non-today browser entries that aren't already in Excel
+    const keptKeys = new Set(kept.map(r => `${r['Category']}|${r['Start']}|${r['Date']}`));
+    const otherRows = state.entries
+      .filter(e => fmtDate(e.start) !== todayStr)
+      .map(e => entryToRow(e))
+      .filter(r => !keptKeys.has(`${r['Category']}|${r['Start']}|${r['Date']}`));
+
+    const all = [...kept, ...otherRows, ...todayRows];
+
+    all.sort((a, b) => {
+      if (a['Date'] !== b['Date']) {
+        const parseDate = d => { const p = d.split(' '); return new Date(`${p[0]} ${p[1]} ${p[2]}`); };
+        return parseDate(a['Date']) - parseDate(b['Date']);
+      }
+      return (a['Start'] || '').localeCompare(b['Start'] || '');
+    });
+
+    await writeToHandle(all);
+    lastSavedCount = state.entries.length;
+    showToast(`Synced ${todayRows.length} entries to ${fileHandle.name}`);
+    render();
+  } catch (e) {
+    console.error(e);
+    if (e.name === 'NotAllowedError') {
+      showToast('Permission lost — click "Link file" to reconnect', 'error');
+      fileHandle = null; render();
+    } else {
+      showToast('Save failed: ' + e.message, 'error');
+    }
+  }
+}
+
+function fallbackDownload() {
+  const rows = state.entries.map(e => entryToRow(e));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch:14 },{ wch:28 },{ wch:8 },{ wch:8 },{ wch:6 },{ wch:8 },{ wch:8 },{ wch:18 },{ wch:30 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Time Log');
+  XLSX.writeFile(wb, `timesheet_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('Downloaded (use Chrome/Edge for persistent file linking)');
+}
+
+async function autoSave() {
+  if (fileHandle && state.entries.length > lastSavedCount) await saveToFile();
+}
+
+// ── Init ──
+
+(async function init() {
+  const saved = await loadHandle();
+  if (saved) {
+    try {
+      await saved.queryPermission({ mode: 'readwrite' });
+      fileHandle = saved;
+    } catch(e) {}
+  }
+  render();
+})();
+
+// Close modals on overlay click
+document.getElementById('addModal').addEventListener('click', function(e) {
+  if (e.target === this) hideAddModal();
+});
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) hideEditModal();
+});
+</script>
+
+</body>
+</html>
