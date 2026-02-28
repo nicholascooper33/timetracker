@@ -1184,6 +1184,67 @@ async function autoSave() {
   if (fileHandle && state.entries.length > lastSavedCount) await saveToFile();
 }
 
+// ── Import from Excel (recovery when localStorage is cleared) ──
+//
+// async function importFromExcel() {
+//   if (!fileHandle) return false;
+//   try {
+//     const perm = await fileHandle.queryPermission({ mode: 'readwrite' });
+//     if (perm !== 'granted') {
+//       const req = await fileHandle.requestPermission({ mode: 'readwrite' });
+//       if (req !== 'granted') return false;
+//     }
+//     const file = await fileHandle.getFile();
+//     const buf = await file.arrayBuffer();
+//     if (buf.byteLength === 0) return false;
+//     const wb = XLSX.read(buf, { type: 'array' });
+//     const ws = wb.Sheets[wb.SheetNames[0]];
+//     if (!ws) return false;
+//     const rows = XLSX.utils.sheet_to_json(ws);
+//     if (!rows.length) return false;
+//
+//     // Convert Excel rows back into entry objects
+//     const entries = rows.map(r => {
+//       // Parse date: "28 Feb 2026" format from fmtDate()
+//       const dateParts = (r['Date'] || '').split(' ');
+//       const dateStr = `${dateParts[1]} ${dateParts[0]}, ${dateParts[2]}`;
+//       const base = new Date(dateStr);
+//       if (isNaN(base.getTime())) return null;
+//
+//       // Parse start/end times: "09:30" format from fmtTime()
+//       const [sh, sm] = (r['Start'] || '0:0').split(':').map(Number);
+//       const [eh, em] = (r['End'] || '0:0').split(':').map(Number);
+//
+//       const start = new Date(base); start.setHours(sh, sm, 0, 0);
+//       const end = new Date(base); end.setHours(eh, em, 0, 0);
+//
+//       return {
+//         category: r['Category'] || 'Uncategorized',
+//         start: start.toISOString(),
+//         end: end.toISOString(),
+//         note: r['Note'] || ''
+//       };
+//     }).filter(Boolean);
+//
+//     if (!entries.length) return false;
+//
+//     // Restore categories from imported entries
+//     const importedCats = [...new Set(entries.map(e => e.category))];
+//     const merged = [...new Set([...defaultCategories(), ...importedCats])];
+//
+//     state.entries = entries;
+//     state.categories = merged;
+//     state.activeCategory = null;
+//     state.activeStart = null;
+//     lastSavedCount = entries.length;
+//     save();
+//     return true;
+//   } catch (e) {
+//     console.error('Import from Excel failed:', e);
+//     return false;
+//   }
+// }
+
 // ── Init ──
 
 (async function init() {
@@ -1194,6 +1255,16 @@ async function autoSave() {
       fileHandle = saved;
     } catch(e) {}
   }
+
+  // Uncomment to recover entries from linked Excel when localStorage is empty:
+  // if (fileHandle && state.entries.length === 0) {
+  //   const recovered = await importFromExcel();
+  //   if (recovered) {
+  //     state = loadState(); // reload after import wrote to localStorage
+  //     showToast(`Recovered ${state.entries.length} entries from ${fileHandle.name}`);
+  //   }
+  // }
+
   render();
 })();
 
